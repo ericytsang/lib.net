@@ -42,21 +42,28 @@ class EncryptedConnection(val underlyingConnection:Connection,val encodedEncrypt
         val dataO = outputStream.let(::DataOutputStream)
         val dataI = inputStream.let(::DataInputStream)
         val sentChallenge = Math.random()
-        val t1 = thread {
-            dataO.writeDouble(sentChallenge)
-            dataO.flush()
-        }
-        val receivedChallenge = dataI.readDouble()
-        t1.join()
-        val t2 = thread {
-            dataO.writeDouble(receivedChallenge)
-            dataO.flush()
-        }
-        val receivedResponse = dataI.readDouble()
-        t2.join()
-        require(receivedResponse == sentChallenge)
+        try
         {
-            "challenge was not responded to correctly"
+            val t1 = thread {
+                dataO.writeDouble(sentChallenge)
+                dataO.flush()
+            }
+            val receivedChallenge = dataI.readDouble()
+            t1.join()
+            val t2 = thread {
+                dataO.writeDouble(receivedChallenge)
+                dataO.flush()
+            }
+            val receivedResponse = dataI.readDouble()
+            t2.join()
+            require(receivedResponse == sentChallenge)
+            {
+                "challenge was not responded to correctly"
+            }
+        }
+        catch (ex:Exception)
+        {
+            underlyingConnection.close()
         }
     }
 }

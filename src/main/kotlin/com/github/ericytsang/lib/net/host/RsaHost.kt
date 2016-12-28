@@ -2,7 +2,6 @@ package com.github.ericytsang.lib.net.host
 
 import com.github.ericytsang.lib.net.connection.Connection
 import com.github.ericytsang.lib.net.connection.EncryptedConnection
-import java.util.ArrayList
 
 class RsaHost:Client<RsaHost.Address>
 {

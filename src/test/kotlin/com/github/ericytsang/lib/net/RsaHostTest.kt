@@ -7,6 +7,7 @@ import com.github.ericytsang.lib.net.host.TcpServer
 import org.junit.Test
 import java.io.DataInputStream
 import java.io.DataOutputStream
+import java.io.EOFException
 import java.net.InetAddress
 import java.security.KeyPairGenerator
 import java.util.concurrent.ArrayBlockingQueue
@@ -22,9 +23,6 @@ class RsaHostTest
     @Test
     fun generalTest()
     {
-        val tcpClient = TcpClient.anySrcPort()
-        val tcpServer = TcpServer(TEST_PORT)
-
         // generate keypairs
         val serverKeypair = run()
         {
@@ -44,13 +42,13 @@ class RsaHostTest
         thread {
             val rsaHost = RsaHost()
             q.put(rsaHost.connect(RsaHost.Address(
-                {tcpServer.accept()},
+                {TcpServer(TEST_PORT).use {it.accept()}},
                 clientKeypair.public.encoded.toList(),
                 serverKeypair.private.encoded.toList())))
         }
         val con1 = RsaHost()
             .connect(RsaHost.Address(
-                {tcpClient.connect(TcpClient.Address(InetAddress.getLocalHost(),TEST_PORT))},
+                {TcpClient.anySrcPort().connect(TcpClient.Address(InetAddress.getLocalHost(),TEST_PORT))},
                 serverKeypair.public.encoded.toList(),
                 clientKeypair.private.encoded.toList()))
         val con2 = q.take()
@@ -60,5 +58,57 @@ class RsaHostTest
             con1.outputStream.let(::DataOutputStream).use {it.writeUTF("hello, friend!")}
         }
         println(con2.inputStream.let(::DataInputStream).use {it.readUTF()})
+    }
+
+    @Test
+    fun badKeysTest()
+    {
+        // generate keypairs
+        val serverKeypair = run()
+        {
+            val keyGen = KeyPairGenerator.getInstance("RSA")
+            keyGen.initialize(512)
+            keyGen.generateKeyPair()
+        }
+        val clientKeypair = run()
+        {
+            val keyGen = KeyPairGenerator.getInstance("RSA")
+            keyGen.initialize(512)
+            keyGen.generateKeyPair()
+        }
+
+        // establish connections
+        val q = ArrayBlockingQueue<Connection>(1)
+        thread {
+            val rsaHost = RsaHost()
+            q.put(rsaHost.connect(RsaHost.Address(
+                {TcpServer(TEST_PORT).use {it.accept()}},
+                clientKeypair.public.encoded.toList(),
+                serverKeypair.private.encoded.toList())))
+        }
+        val con1 = RsaHost()
+            .connect(RsaHost.Address(
+                {TcpClient.anySrcPort().connect(TcpClient.Address(InetAddress.getLocalHost(),TEST_PORT))},
+                clientKeypair.public.encoded.toList(),
+                clientKeypair.private.encoded.toList()))
+        val con2 = q.take()
+
+        // exchange some data
+        thread {
+            try
+            {
+                con1.outputStream.let(::DataOutputStream).use {it.writeUTF("hello, friend!")}
+                assert(false)
+            }
+            catch (ex:Exception)
+            {}
+        }
+        try
+        {
+            println(con2.inputStream.let(::DataInputStream).use {it.readUTF()})
+            assert(false)
+        }
+        catch (ex:EOFException)
+        {}
     }
 }
