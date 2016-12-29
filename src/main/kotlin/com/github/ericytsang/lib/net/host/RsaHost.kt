@@ -7,15 +7,16 @@ class RsaHost:Client<RsaHost.Address>
 {
     override fun connect(remoteAddress:Address):EncryptedConnection
     {
-        // create the encrypted connection
-        val underlyingConnection = remoteAddress.connectionFactory()
-        val encryptingKey = remoteAddress.encryptingKey.toByteArray()
-        val decryptingKey = remoteAddress.decryptingKey.toByteArray()
-        return EncryptedConnection(underlyingConnection,encryptingKey,decryptingKey)
+        return EncryptedConnection(
+            remoteAddress.connectionFactory(),
+            remoteAddress.encryptingKey.toByteArray(),
+            remoteAddress.decryptingKey.toByteArray(),
+            remoteAddress.authTimeoutMillis)
     }
 
     data class Address(
         val connectionFactory:()->Connection,
         val encryptingKey:List<Byte>,
-        val decryptingKey:List<Byte>)
+        val decryptingKey:List<Byte>,
+        val authTimeoutMillis:Long = EncryptedConnection.DEFAULT_AUTHENTICATION_TIMEOUT)
 }
