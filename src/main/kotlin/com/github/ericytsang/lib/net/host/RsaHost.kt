@@ -5,7 +5,7 @@ import com.github.ericytsang.lib.net.connection.EncryptedConnection
 
 class RsaHost:Client<RsaHost.Address>
 {
-    override fun connect(remoteAddress:Address):Connection
+    override fun connect(remoteAddress:Address):EncryptedConnection
     {
         // create the encrypted connection
         val underlyingConnection = remoteAddress.connectionFactory()

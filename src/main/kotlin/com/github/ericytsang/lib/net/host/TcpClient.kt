@@ -1,6 +1,5 @@
 package com.github.ericytsang.lib.net.host
 
-import com.github.ericytsang.lib.net.connection.Connection
 import com.github.ericytsang.lib.net.connection.TcpConnection
 import java.net.InetAddress
 import java.net.InetSocketAddress
@@ -31,7 +30,7 @@ class TcpClient private constructor(val socketFactory:()->Socket):Client<TcpClie
         }
     }
 
-    override fun connect(remoteAddress:Address):Connection
+    override fun connect(remoteAddress:Address):TcpConnection
     {
         val socket = socketFactory()
         socket.connect(InetSocketAddress(remoteAddress.address,remoteAddress.port))
