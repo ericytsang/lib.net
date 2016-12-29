@@ -7,10 +7,11 @@ import com.github.ericytsang.lib.net.host.TcpServer
 import org.junit.Test
 import java.io.DataInputStream
 import java.io.DataOutputStream
-import java.io.EOFException
 import java.net.InetAddress
 import java.security.KeyPairGenerator
 import java.util.concurrent.ArrayBlockingQueue
+import java.util.concurrent.TimeoutException
+import javax.security.sasl.AuthenticationException
 import kotlin.concurrent.thread
 
 class RsaHostTest
@@ -78,37 +79,67 @@ class RsaHostTest
         }
 
         // establish connections
-        val q = ArrayBlockingQueue<Connection>(1)
-        thread {
-            val rsaHost = RsaHost()
-            q.put(rsaHost.connect(RsaHost.Address(
-                {TcpServer(TEST_PORT).use {it.accept()}},
-                clientKeypair.public.encoded.toList(),
-                serverKeypair.private.encoded.toList())))
-        }
-        val con1 = RsaHost()
-            .connect(RsaHost.Address(
-                {TcpClient.anySrcPort().connect(TcpClient.Address(InetAddress.getLocalHost(),TEST_PORT))},
-                clientKeypair.public.encoded.toList(),
-                clientKeypair.private.encoded.toList()))
-        val con2 = q.take()
-
-        // exchange some data
+        val q = ArrayBlockingQueue<()->Unit>(1)
         thread {
             try
             {
-                con1.outputStream.let(::DataOutputStream).use {it.writeUTF("hello, friend!")}
-                assert(false)
+                RsaHost().connect(RsaHost.Address(
+                    {TcpServer(TEST_PORT).use {it.accept()}},
+                    clientKeypair.public.encoded.toList(),
+                    serverKeypair.private.encoded.toList()))
+                q.put({throw RuntimeException("connection established")})
             }
-            catch (ex:Exception)
-            {}
+            catch (ex:AuthenticationException) {
+                q.put({Unit})
+            }
         }
         try
         {
-            println(con2.inputStream.let(::DataInputStream).use {it.readUTF()})
+            RsaHost().connect(RsaHost.Address(
+                {TcpClient.anySrcPort().connect(TcpClient.Address(InetAddress.getLocalHost(),TEST_PORT))},
+                clientKeypair.public.encoded.toList(),
+                clientKeypair.private.encoded.toList()))
+            assert(false)
+            {
+                "connection established"
+            }
+        }
+        catch (ex:AuthenticationException) {}
+        q.take().invoke()
+    }
+
+    @Test
+    fun timeoutTest()
+    {
+        // generate keypairs
+        val serverKeypair = run()
+        {
+            val keyGen = KeyPairGenerator.getInstance("RSA")
+            keyGen.initialize(512)
+            keyGen.generateKeyPair()
+        }
+        val clientKeypair = run()
+        {
+            val keyGen = KeyPairGenerator.getInstance("RSA")
+            keyGen.initialize(512)
+            keyGen.generateKeyPair()
+        }
+
+        // establish connections
+        val q = ArrayBlockingQueue<Connection>(1)
+        thread {
+            TcpClient.anySrcPort().connect(TcpClient.Address(InetAddress.getLocalHost(),TEST_PORT))
+                .let {q.put(it)}
+        }
+        try
+        {
+            RsaHost().connect(RsaHost.Address(
+                {TcpServer(TEST_PORT).use {it.accept()}},
+                clientKeypair.public.encoded.toList(),
+                serverKeypair.private.encoded.toList()))
             assert(false)
         }
-        catch (ex:EOFException)
-        {}
+        catch (ex:TimeoutException) {}
+        q.take()
     }
 }
