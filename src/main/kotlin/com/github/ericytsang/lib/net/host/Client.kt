@@ -2,10 +2,6 @@ package com.github.ericytsang.lib.net.host
 
 import com.github.ericytsang.lib.net.connection.Connection
 
-/**
- * Created by etsang on 20/10/16.
- */
-
 interface Client<in Address>
 {
     /**

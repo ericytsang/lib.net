@@ -6,8 +6,6 @@ import com.github.ericytsang.lib.concurrent.future
 import com.github.ericytsang.lib.concurrent.sleep
 import com.github.ericytsang.lib.net.randomBytes
 import com.github.ericytsang.lib.net.readByteArray
-import java.io.DataInputStream
-import java.io.DataOutputStream
 import java.io.InputStream
 import java.io.OutputStream
 import java.security.KeyFactory
@@ -84,19 +82,19 @@ class EncryptedConnection(val underlyingConnection:Connection,val encodedEncrypt
     private fun authenticate(inputStream:InputStream,outputStream:OutputStream)
     {
         // set up rsa input and output streams
-        val dataO = run {
+        val rsaO = run {
             val cipher = Cipher.getInstance("RSA")
             val encryptingKey = KeyFactory.getInstance("RSA")
                 .generatePublic(X509EncodedKeySpec(encodedEncryptingKey))
             cipher.init(Cipher.ENCRYPT_MODE,encryptingKey)
-            CipherOutputStream(outputStream,cipher).let(::DataOutputStream)
+            CipherOutputStream(outputStream,cipher)
         }
-        val dataI = run {
+        val rsaI = run {
             val cipher = Cipher.getInstance("RSA")
             val decryptingKey = KeyFactory.getInstance("RSA")
                 .generatePrivate(PKCS8EncodedKeySpec(encodedDecryptingKey))
             cipher.init(Cipher.DECRYPT_MODE,decryptingKey)
-            CipherInputStream(inputStream,cipher).let(::DataInputStream)
+            CipherInputStream(inputStream,cipher)
         }
 
         // exchange some messages to make sure both parties have the
@@ -104,18 +102,18 @@ class EncryptedConnection(val underlyingConnection:Connection,val encodedEncrypt
         run {
             val sentChallenge = randomBytes(CHALLENGE_BYTE_LENGTH)
             val f1 = future {
-                dataO.write(sentChallenge)
-                dataO.flush()
+                rsaO.write(sentChallenge)
+                rsaO.flush()
                 Unit
             }
-            val receivedChallenge = dataI.readByteArray(CHALLENGE_BYTE_LENGTH)
+            val receivedChallenge = rsaI.readByteArray(CHALLENGE_BYTE_LENGTH)
             f1.get()
             val f2 = future {
-                dataO.write(receivedChallenge)
-                dataO.flush()
+                rsaO.write(receivedChallenge)
+                rsaO.flush()
                 Unit
             }
-            val receivedResponse = dataI.readByteArray(CHALLENGE_BYTE_LENGTH)
+            val receivedResponse = rsaI.readByteArray(CHALLENGE_BYTE_LENGTH)
             f2.get()
             require(receivedResponse.toList() == sentChallenge.toList())
             {

@@ -5,9 +5,6 @@ import java.io.OutputStream
 import java.net.Socket
 import java.net.SocketException
 
-/**
- * Created by surpl on 10/28/2016.
- */
 class TcpConnection(val socket:Socket):Connection
 {
     override val inputStream:InputStream = object:InputStream()
