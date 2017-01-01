@@ -4,6 +4,7 @@ import com.github.ericytsang.lib.cipherstream.CipherInputStream
 import com.github.ericytsang.lib.cipherstream.CipherOutputStream
 import com.github.ericytsang.lib.concurrent.future
 import com.github.ericytsang.lib.concurrent.sleep
+import com.github.ericytsang.lib.net.randomLong
 import java.io.DataInputStream
 import java.io.DataOutputStream
 import java.io.InputStream
@@ -60,20 +61,20 @@ class EncryptedConnection(val underlyingConnection:Connection,val encodedEncrypt
         // encoding and decoding ciphers
         try
         {
-            val sentChallenge = Math.random()
+            val sentChallenge = randomLong()
             val f1 = future {
-                dataO.writeDouble(sentChallenge)
+                dataO.writeLong(sentChallenge)
                 dataO.flush()
                 Unit
             }
-            val receivedChallenge = dataI.readDouble()
+            val receivedChallenge = dataI.readLong()
             f1.get()
             val f2 = future {
-                dataO.writeDouble(receivedChallenge)
+                dataO.writeLong(receivedChallenge)
                 dataO.flush()
                 Unit
             }
-            val receivedResponse = dataI.readDouble()
+            val receivedResponse = dataI.readLong()
             f2.get()
             require(receivedResponse == sentChallenge)
             {

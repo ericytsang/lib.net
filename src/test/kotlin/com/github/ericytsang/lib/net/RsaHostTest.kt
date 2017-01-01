@@ -3,6 +3,7 @@ package com.github.ericytsang.lib.net
 import com.github.ericytsang.lib.net.host.RsaHost
 import com.github.ericytsang.lib.net.host.TcpClient
 import com.github.ericytsang.lib.net.connection.Connection
+import com.github.ericytsang.lib.net.connection.EncryptedConnection
 import com.github.ericytsang.lib.net.host.TcpServer
 import org.junit.Test
 import java.io.DataInputStream
@@ -56,9 +57,19 @@ class RsaHostTest
 
         // exchange some data
         thread {
-            con1.outputStream.let(::DataOutputStream).use {it.writeUTF("hello, friend!")}
+            con2.inputStream.let(::DataInputStream).use {
+                println(it.readUTF())
+                println(it.readUTF())
+                println(it.readUTF())
+                println(it.readUTF())
+            }
         }
-        println(con2.inputStream.let(::DataInputStream).use {it.readUTF()})
+        con1.outputStream.let(::DataOutputStream).use {
+            it.writeUTF("1234567890")
+            it.writeUTF("1234567890")
+            it.writeUTF("1234567890")
+            it.writeUTF("1234567890")
+        }
     }
 
     @Test
@@ -141,5 +152,14 @@ class RsaHostTest
         }
         catch (ex:TimeoutException) {}
         q.take()
+    }
+
+    @Test
+    fun randomLongs()
+    {
+        for (i in 1..30)
+        {
+            println(randomLong())
+        }
     }
 }
