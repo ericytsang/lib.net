@@ -3,7 +3,6 @@ package com.github.ericytsang.lib.net
 import com.github.ericytsang.lib.net.host.RsaHost
 import com.github.ericytsang.lib.net.host.TcpClient
 import com.github.ericytsang.lib.net.connection.Connection
-import com.github.ericytsang.lib.net.connection.EncryptedConnection
 import com.github.ericytsang.lib.net.host.TcpServer
 import org.junit.Test
 import java.io.DataInputStream
@@ -62,13 +61,19 @@ class RsaHostTest
                 println(it.readUTF())
                 println(it.readUTF())
                 println(it.readUTF())
+                println(it.readUTF())
+                println(it.readUTF())
+                println(it.readUTF())
             }
         }
         con1.outputStream.let(::DataOutputStream).use {
-            it.writeUTF("1234567890")
-            it.writeUTF("1234567890")
-            it.writeUTF("1234567890")
-            it.writeUTF("1234567890")
+            it.writeUTF("12345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890")
+            it.writeUTF("12345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890")
+            it.writeUTF("12345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890")
+            it.writeUTF("12345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890")
+            it.writeUTF("12345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890")
+            it.writeUTF("12345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890")
+            it.writeUTF("12345678901234567890123456789012345678901234567890123456789012345678901234567890123456789012345678901234567890")
         }
     }
 
@@ -159,7 +164,7 @@ class RsaHostTest
     {
         for (i in 1..30)
         {
-            println(randomLong())
+            println(randomBytes(8).toList())
         }
     }
 }
