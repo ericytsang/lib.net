@@ -29,16 +29,20 @@ class EncryptedConnection(val underlyingConnection:Connection,val encodedEncrypt
         const val CHALLENGE_BYTE_LENGTH = 8
         const val DEFAULT_AUTHENTICATION_TIMEOUT:Long = 5000
     }
+
     override val inputStream:InputStream
+
     override val outputStream:OutputStream
+
     override fun close()
     {
         inputStream.close()
         outputStream.close()
     }
+
     init
     {
-        // set kill everything on timeout
+        // prepare kill connection on timeout
         var isTimedOut = false
         val killOnTimeout = thread {
             if (sleep(timeout).wasInterrupted) return@thread
@@ -48,72 +52,16 @@ class EncryptedConnection(val underlyingConnection:Connection,val encodedEncrypt
 
         try
         {
-            val dataO = run {
-                val cipher = Cipher.getInstance("RSA")
-                val encryptingKey = KeyFactory.getInstance("RSA")
-                    .generatePublic(X509EncodedKeySpec(encodedEncryptingKey))
-                cipher.init(Cipher.ENCRYPT_MODE,encryptingKey)
-                CipherOutputStream(underlyingConnection.outputStream,cipher)
-                    .let(::DataOutputStream)
-            }
-            val dataI = run {
-                val cipher = Cipher.getInstance("RSA")
-                val decryptingKey = KeyFactory.getInstance("RSA")
-                    .generatePrivate(PKCS8EncodedKeySpec(encodedDecryptingKey))
-                cipher.init(Cipher.DECRYPT_MODE,decryptingKey)
-                CipherInputStream(underlyingConnection.inputStream,cipher)
-                    .let(::DataInputStream)
-            }
+            // set up encrypted & authenticated connection
+            val encryptedStreams = encrypt(underlyingConnection.inputStream,underlyingConnection.outputStream)
+            authenticate(encryptedStreams.first,encryptedStreams.second)
+            inputStream = encryptedStreams.first
+            outputStream = encryptedStreams.second
 
-            // exchange some messages to make sure both parties have the
-            // appropriate encoding and decoding ciphers
-            run {
-                val sentChallenge = randomBytes(CHALLENGE_BYTE_LENGTH)
-                val f1 = future {
-                    dataO.write(sentChallenge)
-                    dataO.flush()
-                    Unit
-                }
-                val receivedChallenge = ByteArray(CHALLENGE_BYTE_LENGTH)
-                dataI.readFully(receivedChallenge)
-                f1.get()
-                val f2 = future {
-                    dataO.write(receivedChallenge)
-                    dataO.flush()
-                    Unit
-                }
-                val receivedResponse = ByteArray(CHALLENGE_BYTE_LENGTH)
-                dataI.readFully(receivedResponse)
-                f2.get()
-                require(receivedResponse.toList() == sentChallenge.toList())
-                {
-                    "challenge was not responded to correctly"
-                }
-            }
-
-            // generate AES key and IV to use for encrypting sent data
-            val encryptingKey = SecretKeySpec(randomBytes(AES_KEY_BYTE_LENGTH),"AES")
-            val encryptingIv = IvParameterSpec(randomBytes(AES_KEY_BLOCK_BYTE_LENGTH))
-            val encryptingCipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
-                .apply {init(Cipher.ENCRYPT_MODE,encryptingKey,encryptingIv)}
-            outputStream = CipherOutputStream(underlyingConnection.outputStream,encryptingCipher)
-
-            // send the AES key and IV to remote host
-            val f1 = future {
-                dataO.write(encryptingKey.encoded)
-                dataO.write(encryptingIv.iv)
-                dataO.flush()
-                Unit
-            }
-
-            // receive AES key and IV from remote host to use for decrypting
-            // received data
-            val decryptingKey = SecretKeySpec(dataI.readByteArray(AES_KEY_BYTE_LENGTH),"AES")
-            val decryptingIv = IvParameterSpec(dataI.readByteArray(AES_KEY_BLOCK_BYTE_LENGTH))
-            val decryptingCipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
-                .apply {init(Cipher.DECRYPT_MODE,decryptingKey,decryptingIv)}
-            inputStream = CipherInputStream(underlyingConnection.inputStream,decryptingCipher)
-            f1.get()
+            // kill the kill on timeout thread because encryption and
+            // authentication setup has completed before the kill on timeout
+            // thread timed out...
+            killOnTimeout.interrupt()
         }
 
         // if something goes wrong, clean up resources; do not close underlying
@@ -131,11 +79,93 @@ class EncryptedConnection(val underlyingConnection:Connection,val encodedEncrypt
                 throw AuthenticationException("authentication failed",ex)
             }
         }
+    }
 
-        // kill the kill on timeout thread in any case
-        finally
-        {
-            killOnTimeout.interrupt()
+    private fun authenticate(inputStream:InputStream,outputStream:OutputStream)
+    {
+        // set up rsa input and output streams
+        val dataO = run {
+            val cipher = Cipher.getInstance("RSA")
+            val encryptingKey = KeyFactory.getInstance("RSA")
+                .generatePublic(X509EncodedKeySpec(encodedEncryptingKey))
+            cipher.init(Cipher.ENCRYPT_MODE,encryptingKey)
+            CipherOutputStream(outputStream,cipher).let(::DataOutputStream)
         }
+        val dataI = run {
+            val cipher = Cipher.getInstance("RSA")
+            val decryptingKey = KeyFactory.getInstance("RSA")
+                .generatePrivate(PKCS8EncodedKeySpec(encodedDecryptingKey))
+            cipher.init(Cipher.DECRYPT_MODE,decryptingKey)
+            CipherInputStream(inputStream,cipher).let(::DataInputStream)
+        }
+
+        // exchange some messages to make sure both parties have the
+        // appropriate encoding and decoding ciphers
+        run {
+            val sentChallenge = randomBytes(CHALLENGE_BYTE_LENGTH)
+            val f1 = future {
+                dataO.write(sentChallenge)
+                dataO.flush()
+                Unit
+            }
+            val receivedChallenge = dataI.readByteArray(CHALLENGE_BYTE_LENGTH)
+            f1.get()
+            val f2 = future {
+                dataO.write(receivedChallenge)
+                dataO.flush()
+                Unit
+            }
+            val receivedResponse = dataI.readByteArray(CHALLENGE_BYTE_LENGTH)
+            f2.get()
+            require(receivedResponse.toList() == sentChallenge.toList())
+            {
+                "challenge was not responded to correctly"
+            }
+        }
+    }
+
+    private fun encrypt(inputStream:InputStream,outputStream:OutputStream):Pair<InputStream,OutputStream>
+    {
+        // set up rsa input and output streams
+        val rsaO = run {
+            val cipher = Cipher.getInstance("RSA")
+            val encryptingKey = KeyFactory.getInstance("RSA")
+                .generatePublic(X509EncodedKeySpec(encodedEncryptingKey))
+            cipher.init(Cipher.ENCRYPT_MODE,encryptingKey)
+            CipherOutputStream(outputStream,cipher)
+        }
+        val rsaI = run {
+            val cipher = Cipher.getInstance("RSA")
+            val decryptingKey = KeyFactory.getInstance("RSA")
+                .generatePrivate(PKCS8EncodedKeySpec(encodedDecryptingKey))
+            cipher.init(Cipher.DECRYPT_MODE,decryptingKey)
+            CipherInputStream(inputStream,cipher)
+        }
+
+        // generate AES key and IV to use for encrypting sent data
+        val encryptingKey = SecretKeySpec(randomBytes(AES_KEY_BYTE_LENGTH),"AES")
+        val encryptingIv = IvParameterSpec(randomBytes(AES_KEY_BLOCK_BYTE_LENGTH))
+        val encryptingCipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+            .apply {init(Cipher.ENCRYPT_MODE,encryptingKey,encryptingIv)}
+        val o = CipherOutputStream(outputStream,encryptingCipher)
+
+        // send the AES key and IV to remote host
+        val f1 = future {
+            rsaO.write(encryptingKey.encoded)
+            rsaO.write(encryptingIv.iv)
+            rsaO.flush()
+            Unit
+        }
+
+        // receive AES key and IV from remote host to use for decrypting
+        // received data
+        val decryptingKey = SecretKeySpec(rsaI.readByteArray(AES_KEY_BYTE_LENGTH),"AES")
+        val decryptingIv = IvParameterSpec(rsaI.readByteArray(AES_KEY_BLOCK_BYTE_LENGTH))
+        val decryptingCipher = Cipher.getInstance("AES/CBC/PKCS5Padding")
+            .apply {init(Cipher.DECRYPT_MODE,decryptingKey,decryptingIv)}
+        val i = CipherInputStream(inputStream,decryptingCipher)
+        f1.get()
+
+        return i to o
     }
 }
