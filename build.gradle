@@ -2,7 +2,8 @@ group 'com.github.ericytsang'
 version '1.0.0'
 
 buildscript {
-    ext.kotlin_version = '1.0.5-2'
+    ext.kotlin_version = '1.1.0'
+    ext.stream_version = '2.0.2'
     repositories {
         mavenCentral()
     }
@@ -26,9 +27,9 @@ repositories {
 }
 
 dependencies {
-    compile "com.github.ericytsang:lib.concurrent:3.0.0"
-    compile "com.github.ericytsang:lib.cipherstream:1.0.1"
-    compile "com.github.ericytsang:lib.simplepipestream:1.0.1"
+    compile "com.github.ericytsang:lib.concurrent:4.0.0"
+    compile "com.github.ericytsang:lib.cipherstream:$stream_version"
+    compile "com.github.ericytsang:lib.simplepipestream:$stream_version"
     compile "org.jetbrains.kotlin:kotlin-stdlib:$kotlin_version"
     testCompile "junit:junit:4.11"
     testCompile "org.jetbrains.kotlin:kotlin-test-junit:$kotlin_version"
